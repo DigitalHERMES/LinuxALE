@@ -31,6 +31,9 @@
  * 
  * History:
  *   $Log$
+ *   Revision 1.1.1.1  2001/05/23 20:19:50  pile
+ *   Initial version for sourceforge.net
+ *
  *   Revision 0.3  2001/05/21 13:51:16  pile
  *   Minor fixes in output.
  *
@@ -75,6 +78,21 @@ static const char *preamble_types[] = {
 static const char *CMD_types[] = {
   "[Advanced LQA]", "[LQA]", "[DBA]", "[Channels]", "[DTM]", "[Freq]",
   "[Mode selection]", "[Noise report]"
+};
+
+#define ASCII_128  0
+#define ASCII_64   1
+#define ASCII_38   2
+
+char ASCII_Set[128] = {
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2,
+         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1,
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 
 const int symbol_lookup[22] = {8,8,8,8,8,8,0,8,1,8,3,8,2,8,6,8,7,8,5,8,4,8};
@@ -142,72 +160,38 @@ void decode_word (unsigned long word, FILE *log_file)
   a = (word>>14)&0x7F;
   preamble = (word>>21)&0x7;
 
-  /* the following is a dirty hack before implementing ale
-     decoder state automaton: if other than DATA comes, the
-     stuff is started, else DATA is coming and only if there
-     was something else than DATA first it can be printed.
-     This tries to get rid of printing rubbish DATA messages,
-     noticed those can be very annoying.
-     
-     known bug: this still leaves one DATA rubbish output
-     after proper messages */
-  
-  if (preamble != 0x0) /* if other than DATA */
+  /* if CMD just print the stuff */
+  if (preamble == 6) 
     {
-      started = 1; /* proper message is started */
+      sprintf (tmpBuffer, "%s ",preamble_types[preamble]);
+      strcat (msg, tmpBuffer);
+      sprintf(tmpBuffer, "%c%c%c",a,b,c);
+      strcat (msg, tmpBuffer);
+      
+      printf ("%s\n", msg);
+      if (log_file)
+	{
+	  fprintf (log_file, "%s\n", msg);
+	}
     }
-  else /* if DATA */
+  else 
+    /* if other than CMD */
     {
-      if (started == 1) { /* it must be started properly */
-	sprintf (tmpBuffer, "%s ",preamble_types[preamble]);
-	strcat (msg, tmpBuffer);
-	if (isprint(a) && isprint (b) && isprint (c))
-	  {
-	    sprintf(tmpBuffer, "%c%c%c",a,b,c);
-	    strcat (msg, tmpBuffer);
-	  }
-	else 
-	  {
-	    sprintf (tmpBuffer, "[garbage: %d, %d, %d]", a,b,c);
-	    strcat (msg, tmpBuffer);
-	  }
-	printf ("%s\n", msg);
-	if (log_file)
-	  {
-	    fprintf (log_file, "%s\n", msg);
-	  }
-      }
-      /* and we can zero the started flag because there is never
-	 two DATA together (only TIS - DATA - REP for example) */
-
-      started = 0;
+      /* check if proper charset i.e. proper ale addresses */
+      if((ASCII_Set[a]==ASCII_38)&&(ASCII_Set[b]==ASCII_38)&&(ASCII_Set[c]==ASCII_38)) 
+	{
+	  sprintf (tmpBuffer, "%s ",preamble_types[preamble]);
+	  strcat (msg, tmpBuffer);
+	  sprintf(tmpBuffer, "%c%c%c",a,b,c);
+	  strcat (msg, tmpBuffer);
+	  
+	  printf ("%s\n", msg);
+	  if (log_file)
+	    {
+	      fprintf (log_file, "%s\n", msg);
+	    }
+	}
     }
-  /* if proper message, it can be printed. no alone DATA. */
-  if (started) {
-    sprintf (tmpBuffer, "%s ",preamble_types[preamble]);
-    strcat (msg, tmpBuffer);
-    if (isprint(a) && isprint (b) && isprint (c))
-      {
-	sprintf(tmpBuffer, "%c%c%c",a,b,c);
-        strcat (msg, tmpBuffer);
-      }
-    else
-      {
-        sprintf (tmpBuffer, "[garbage: %d, %d, %d]", a,b,c);
-        strcat (msg, tmpBuffer);
-      }
-
-    if (preamble == 6) /* if CMD */
-      {
-	decodeCMD(word);
-      }
-  
-    printf ("%s\n", msg);
-    if (log_file) 
-      {
-	fprintf (log_file, "%s\n", msg);
-      }
-  }
   fflush(log_file);
 }
 
@@ -295,8 +279,10 @@ void modem_new_symbol(int sym, FILE *log_file)
 		Word sync may have occurred
 		Make sure BASIC alphabet characters have been received to confirm
 	      */ 
-
+	      
 	      decode_word(word, log_file);
+	      /* now we have a proper sync; added after 0.0.1 */
+	      word_sync = WORD_SYNC;
 	      word_sync_position = input_buffer_pos; 
 
 	    }
@@ -310,6 +296,11 @@ void modem_new_symbol(int sym, FILE *log_file)
 	  /* Signal new word */
 	  word = modem_de_interleave_and_fec(majority_vote_array,&errors);
 	  decode_word (word, log_file);
+	}
+      else 
+	{
+	  /* we don't have a proper sync; added after 0.0.1 */
+	  word_sync = NOT_WORD_SYNC;
 	}
     }			
 }
@@ -348,6 +339,10 @@ void modem(unsigned short *sample, int length, FILE *log_file)
   for(i=0; i<length; i++)
     {
       if(sample[i]&0x8000) 
+	/*
+	  converting between 2's compliment and floating point maths 
+  	  a mystical factor is (1/2^15)
+	*/
 	new_sample = -(((~sample[i])&0x7FFF)*0.0000305176);
       else
 	new_sample = sample[i]*0.0000305176;

@@ -35,6 +35,9 @@
  * 
  * History:
  *   $Log$
+ *   Revision 1.2  2001/06/17 19:39:35  pile
+ *   Socket server functionality by GV
+ *
  *   Revision 1.1.1.1  2001/05/23 20:19:50  pile
  *   Initial version for sourceforge.net
  *
@@ -55,7 +58,7 @@
 /* Global */
 command_line_options Command_line_options;
 
-void schedular(int fd)
+void schedular(int fd, FILE *log_file)
 {
   unsigned char sout[FRAME_SIZE*2];
   int readstat;
@@ -66,7 +69,7 @@ void schedular(int fd)
     {
       if (readstat = read(fd, sout, FRAME_SIZE*2) > 0)
         {
-          modem((unsigned short*)sout,FRAME_SIZE);
+          modem((unsigned short*)sout,FRAME_SIZE, log_file);
         }
       else {
         exit (-1);
@@ -83,6 +86,8 @@ int main(int argc, char *argv[])
               			    the sound card */
   int fmt;
   int sample_rate = SAMPLE_RATE; /* sample rate from audio card */
+  FILE *log_file = NULL;         /* pointer to log file */
+
 
   pthread_t a_thread;          /*  for server */
 
@@ -92,6 +97,7 @@ int main(int argc, char *argv[])
   Command_line_options.port_num=47047;
   Command_line_options.interface_num=0;
   Command_line_options.soundcard_fd=0;
+  Command_line_options.cs_enable = 0; 
 
 
   if (argc < 2) 
@@ -101,7 +107,7 @@ int main(int argc, char *argv[])
     }
 
   /* Read the parameters from the command line */
-  while ((c = getopt(argc, argv, "l:h::f:s::g::v::")) != EOF) 
+  while ((c = getopt(argc, argv, "l:h::f:s::g::v::i::")) != EOF) 
     {
       switch (c)
 	{
@@ -111,8 +117,8 @@ int main(int argc, char *argv[])
 	  break;
         case 'l':
           /* Open log file */
-          Command_line_options.write_file_fd = fopen(optarg, "a");
-          if (!Command_line_options.write_file_fd) {
+	    log_file = fopen(optarg, "a");
+	    if (!log_file) {
             perror ("open log file");
             exit(10);
           }
@@ -136,6 +142,12 @@ int main(int argc, char *argv[])
         case 'v': 
 	  /* Disable terminal output (silent to terminal) */
 	  Command_line_options.silent=1;
+	  break;
+	  
+	case 'i': 
+	  /* enable callsign lookup */
+	  Command_line_options.cs_enable = 1;
+	  db_init();
 	  break;
 
 	case 's':
@@ -202,7 +214,7 @@ int main(int argc, char *argv[])
     exit(2);
   }
 
-  schedular (fd);
+  schedular (fd, log_file);
   return 0;
 }
 

@@ -8,9 +8,9 @@ LIBS = -L. -lm -lpthread
 
 INSTALL_NAME = LinuxALE
 
-OBJECTS = main.o modem.o golay.o server.o 
-SOURCES = main.c modem.c golay.c server.c
-HEADERS = modem.h golay.h server.h main.h
+OBJECTS = main.o modem.o golay.o server.o dblookup.o
+SOURCES = main.c modem.c golay.c server.c dblookup.c
+HEADERS = modem.h golay.h server.h main.h dblookup.h
 
 all: ale
 
@@ -28,6 +28,7 @@ main.c:		modem.h main.h
 modem.c:	modem.h
 golay.c:	golay.h
 server.c:	server.h
+dblookup.c:	dblookup.h
 
 clean:
 	rm *.o ${INSTALL_NAME}

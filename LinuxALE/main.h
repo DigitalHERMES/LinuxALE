@@ -35,6 +35,9 @@
  * 
  * History:
  *   $Log$
+ *   Revision 1.1  2001/06/17 19:39:35  pile
+ *   Socket server functionality by GV
+ *
  *   Revision 1.1.1.1  2001/05/23 20:19:50  pile
  *   Initial version for sourceforge.net
  *
@@ -62,6 +65,7 @@
 #include <stdio.h>
 #include "time.h"
 #include "server.h"
+#include "dblookup.h"
 
 #define FRAME_SIZE  200
 #define SAMPLE_RATE 8000
@@ -76,6 +80,7 @@ I'll make it work here.
 
 typedef struct { 
 unsigned char silent;       /* disable terminal output */
+unsigned char cs_enable;    /* enable callsign lookup */
 FILE *write_file_fd;        /* write file pointer */
 unsigned char write_server; /* enable server */
 int port_num;               /* port num for server */ 
@@ -92,7 +97,8 @@ static const char usage_str[] = "LinuxALE version 0.0.2 \n"
 "  -s            : decode from sound card\n"
 "  -l <filename> : write log file\n"
 "  -v            : silent - no terminal\n"
-"  -g            : enable server function\n";
+"  -g            : enable server function\n"
+"  -i            : enable callsign lookup\n";
 
 
 /* ---------------------------------------------------------------------- */

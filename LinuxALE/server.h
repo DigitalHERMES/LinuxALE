@@ -29,12 +29,13 @@
  *   $Date$
  * 
  * Author:
- *   Charles Brain
- *   Ilkka Toivanen
  *   Glenn Valenta
  * 
  * History:
  *   $Log$
+ *   Revision 1.1  2001/06/17 19:39:35  pile
+ *   Socket server functionality by GV
+ *
  *
  */
 
@@ -63,6 +64,7 @@ It is declared here ATM but someday I'll make it work from main.h
 */
 typedef struct{  
   unsigned char silent;       
+  unsigned char cs_enable;
   FILE *write_file_fd;           
   unsigned char write_server; 
   int port_num;              

@@ -35,6 +35,9 @@
  * 
  * History:
  *   $Log$
+ *   Revision 1.3  2001/06/17 19:39:35  pile
+ *   Socket server functionality by GV
+ *
  *   Revision 1.2  2001/05/29 18:53:44  pile
  *   Fixed sync problems and cleaned up garbage printing (decode_word).
  *
@@ -58,7 +61,7 @@
 #include "modem.h"
 
 /* consolidate all output to one place */
-void output_mesg(char *mesg)
+void output_mesg(char *mesg, FILE *log_file)
 {
       if(!Command_line_options.silent)
 	printf ("%s\n", mesg);
@@ -66,10 +69,10 @@ void output_mesg(char *mesg)
       if(Command_line_options.write_server)
 	send_server(mesg); 
 
-      if(Command_line_options.write_file_fd)
+      if(log_file)
 	{
-	  fprintf(Command_line_options.write_file_fd,"%s\n", mesg);
-	  fflush(Command_line_options.write_file_fd);
+	  fprintf(log_file,"%s\n", mesg);
+	  fflush(log_file);
 	}
 }
 
@@ -93,7 +96,7 @@ void decodeCMD (unsigned long word)
     }
 }
 
-void decode_word (unsigned long word)
+void decode_word (unsigned long word, FILE *log_file)
 {
   unsigned char a, b, c, preamble;
   static int started; /* if other than DATA has arrived */
@@ -123,7 +126,7 @@ void decode_word (unsigned long word)
       sprintf(tmpBuffer, "%c%c%c",a,b,c);
       strcat (msg, tmpBuffer);
 
-      output_mesg(msg);
+      output_mesg(msg, log_file);
 
     }
   else 
@@ -136,8 +139,13 @@ void decode_word (unsigned long word)
 	  strcat (msg, tmpBuffer);
 	  sprintf(tmpBuffer, "%c%c%c",a,b,c);
 	  strcat (msg, tmpBuffer);
-	 
-	  output_mesg(msg);
+
+          if(Command_line_options.cs_enable) {
+            if(preamble>=1&&preamble<=5) {
+              search_db(msg);
+	    }
+	  }
+	  output_mesg(msg, log_file);
 	}
     }
 }
@@ -178,7 +186,7 @@ unsigned long modem_de_interleave_and_fec(int *input, int *errors)
 /*
   Process a new received symbol
 */
-void modem_new_symbol(int sym)
+void modem_new_symbol(int sym, FILE *log_file)
 {
   static int 		bits[VOTE_ARRAY_LENGTH];
   static int 		input_buffer_pos;
@@ -227,7 +235,7 @@ void modem_new_symbol(int sym)
 		Make sure BASIC alphabet characters have been received to confirm
 	      */ 
 	      
-	      decode_word(word);
+	      decode_word(word, log_file);
 	      /* now we have a proper sync; added after 0.0.1 */
 	      word_sync = WORD_SYNC;
 	      word_sync_position = input_buffer_pos; 
@@ -242,7 +250,7 @@ void modem_new_symbol(int sym)
 	  
 	  /* Signal new word */
 	  word = modem_de_interleave_and_fec(majority_vote_array,&errors);
-	  decode_word (word);
+	  decode_word (word, log_file);
 	}
       else 
 	{
@@ -271,7 +279,7 @@ void modem_init(void)
 /*
   Main Signal processing routine
 */
-void modem(unsigned short *sample, int length)
+void modem(unsigned short *sample, int length, FILE *log_file)
 {
   int i,n,max_offset;
   double new_sample;
@@ -368,7 +376,7 @@ void modem(unsigned short *sample, int length)
       */
       if( sample_count == 0 )
 	{
-	  modem_new_symbol(last_symbol);
+	  modem_new_symbol(last_symbol, log_file);
 	}
       fft_history_offset = ++fft_history_offset%FFT_SIZE;
       sample_count       = ++sample_count%MOD_64; 

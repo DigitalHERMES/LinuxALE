@@ -35,6 +35,9 @@
  * 
  * History:
  *   $Log$
+ *   Revision 1.1  2001/06/17 19:39:35  pile
+ *   Socket server functionality by GV
+ *
  *
  */
 
@@ -62,6 +65,8 @@ Things to do:
 2) user selectiable network interfaces
 
 3) user selectable port number
+
+4) Gracfully exit on ctrl-C
 
 */
 

@@ -35,6 +35,9 @@
  * 
  * History:
  *   $Log$
+ *   Revision 1.2  2001/06/17 19:39:35  pile
+ *   Socket server functionality by GV
+ *
  *   Revision 1.1.1.1  2001/05/23 20:19:50  pile
  *   Initial version for sourceforge.net
  *
@@ -54,6 +57,7 @@
 #include "math.h"
 #include "golay.h"
 #include "server.h"
+#include "dblookup.h"
 #include <time.h>
 #include <stdio.h>
 
@@ -76,13 +80,13 @@
 
 /* Function Definitions*/
 
-void output_mesg(char*);
+void output_mesg(char*, FILE*);
 void decodeCMD (unsigned long);
-void decode_word (unsigned long);
-void modem_new_symbol(int);
+void decode_word (unsigned long, FILE*);
+void modem_new_symbol(int, FILE*);
 unsigned long modem_de_interleave_and_fec(int*,int*);
 void modem_init(void);
-void modem(unsigned short*,int);
+void modem(unsigned short*,int, FILE*);
 
 
 

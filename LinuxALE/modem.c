@@ -1,6 +1,9 @@
 /* -*- c -*-
  * 
- * Copyright (C) 2000 - 2001 Charles Brain, Ilkka Toivanen
+ * Copyright (C) 2000 - 2001
+ *   Charles Brain (chbrain@dircon.co.uk)
+ *   Ilkka Toivanen (pile@aimo.kareltek.fi)
+ *   Glenn Valenta (glenn@coloradostudios.com)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -17,7 +20,7 @@
  *      Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * File:
- *   main.c - Main module for ALE decoder
+ *   modem.c  FFT and decoder functions for LinuxALE
  * 
  * Version:
  *   $Revision$
@@ -28,9 +31,13 @@
  * Author:
  *   Charles Brain
  *   Ilkka Toivanen
+ *   Glenn Valenta
  * 
  * History:
  *   $Log$
+ *   Revision 1.2  2001/05/29 18:53:44  pile
+ *   Fixed sync problems and cleaned up garbage printing (decode_word).
+ *
  *   Revision 1.1.1.1  2001/05/23 20:19:50  pile
  *   Initial version for sourceforge.net
  *
@@ -48,78 +55,27 @@
  *
  */
 
-#include "math.h"
-#include "golay.h"
-#include <time.h>
-#include <stdio.h>
+#include "modem.h"
 
-#define FFT_SIZE                    64
-#define MOD_64                      64
-#define SYMBOLS_PER_WORD            49
-#define VOTE_BUFFER_LENGTH          48
-#define NOT_WORD_SYNC               0
-#define WORD_SYNC                   1
-#define BITS_PER_SYMBOL             3
-#define VOTE_ARRAY_LENGTH           (SYMBOLS_PER_WORD*BITS_PER_SYMBOL)
-#define PI                          M_PI
-#define BAD_VOTE_THRESHOLD          25
-#define SYNC_ERROR_THRESHOLD        1
+/* consolidate all output to one place */
+void output_mesg(char *mesg)
+{
+      if(!Command_line_options.silent)
+	printf ("%s\n", mesg);
 
-typedef struct{
-  double real;
-  double imag;
-} Complex;
+      if(Command_line_options.write_server)
+	send_server(mesg); 
 
-static const char *preamble_types[] = {
-  "[DATA]", "[THRU]", "[TO]", "[TWS]", "[FROM]", "[TIS]", "[CMD]",
-  "[REP]"
-};
+      if(Command_line_options.write_file_fd)
+	{
+	  fprintf(Command_line_options.write_file_fd,"%s\n", mesg);
+	  fflush(Command_line_options.write_file_fd);
+	}
+}
 
-static const char *CMD_types[] = {
-  "[Advanced LQA]", "[LQA]", "[DBA]", "[Channels]", "[DTM]", "[Freq]",
-  "[Mode selection]", "[Noise report]"
-};
-
-#define ASCII_128  0
-#define ASCII_64   1
-#define ASCII_38   2
-
-char ASCII_Set[128] = {
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 2,
-         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
-         2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1,
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-};
-
-const int symbol_lookup[22] = {8,8,8,8,8,8,0,8,1,8,3,8,2,8,6,8,7,8,5,8,4,8};
-const int vote_lookup[4]    = {0,0,1,1};	
-
-/*
- * FFT information
- */
-static double  fft_cs_twiddle[FFT_SIZE];
-static double  fft_ss_twiddle[FFT_SIZE];
-static double  fft_history[FFT_SIZE];
-static Complex fft_out[FFT_SIZE];
-static double  fft_mag[FFT_SIZE];
-static int     fft_history_offset;
-
-/*
- * sync information
- */
-static double mag_sum[FFT_SIZE];
-static double mag_history[FFT_SIZE][SYMBOLS_PER_WORD];
-static int    mag_history_offset;
-static int    bit_count;
-static int    word_sync;
 
 void decodeCMD (unsigned long word) 
 {
-  
   int firstletter, metacmd;
 
   firstletter = (word>>14)&0x0F;
@@ -135,10 +91,9 @@ void decodeCMD (unsigned long word)
       }
       */
     }
-  
 }
 
-void decode_word (unsigned long word, FILE *log_file)
+void decode_word (unsigned long word)
 {
   unsigned char a, b, c, preamble;
   static int started; /* if other than DATA has arrived */
@@ -167,12 +122,9 @@ void decode_word (unsigned long word, FILE *log_file)
       strcat (msg, tmpBuffer);
       sprintf(tmpBuffer, "%c%c%c",a,b,c);
       strcat (msg, tmpBuffer);
-      
-      printf ("%s\n", msg);
-      if (log_file)
-	{
-	  fprintf (log_file, "%s\n", msg);
-	}
+
+      output_mesg(msg);
+
     }
   else 
     /* if other than CMD */
@@ -184,15 +136,10 @@ void decode_word (unsigned long word, FILE *log_file)
 	  strcat (msg, tmpBuffer);
 	  sprintf(tmpBuffer, "%c%c%c",a,b,c);
 	  strcat (msg, tmpBuffer);
-	  
-	  printf ("%s\n", msg);
-	  if (log_file)
-	    {
-	      fprintf (log_file, "%s\n", msg);
-	    }
+	 
+	  output_mesg(msg);
 	}
     }
-  fflush(log_file);
 }
 
 unsigned long modem_de_interleave_and_fec(int *input, int *errors)
@@ -231,7 +178,7 @@ unsigned long modem_de_interleave_and_fec(int *input, int *errors)
 /*
   Process a new received symbol
 */
-void modem_new_symbol(int sym, FILE *log_file)
+void modem_new_symbol(int sym)
 {
   static int 		bits[VOTE_ARRAY_LENGTH];
   static int 		input_buffer_pos;
@@ -280,7 +227,7 @@ void modem_new_symbol(int sym, FILE *log_file)
 		Make sure BASIC alphabet characters have been received to confirm
 	      */ 
 	      
-	      decode_word(word, log_file);
+	      decode_word(word);
 	      /* now we have a proper sync; added after 0.0.1 */
 	      word_sync = WORD_SYNC;
 	      word_sync_position = input_buffer_pos; 
@@ -295,7 +242,7 @@ void modem_new_symbol(int sym, FILE *log_file)
 	  
 	  /* Signal new word */
 	  word = modem_de_interleave_and_fec(majority_vote_array,&errors);
-	  decode_word (word, log_file);
+	  decode_word (word);
 	}
       else 
 	{
@@ -324,7 +271,7 @@ void modem_init(void)
 /*
   Main Signal processing routine
 */
-void modem(unsigned short *sample, int length, FILE *log_file)
+void modem(unsigned short *sample, int length)
 {
   int i,n,max_offset;
   double new_sample;
@@ -421,7 +368,7 @@ void modem(unsigned short *sample, int length, FILE *log_file)
       */
       if( sample_count == 0 )
 	{
-	  modem_new_symbol(last_symbol, log_file);
+	  modem_new_symbol(last_symbol);
 	}
       fft_history_offset = ++fft_history_offset%FFT_SIZE;
       sample_count       = ++sample_count%MOD_64; 

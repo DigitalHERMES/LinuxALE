@@ -3,6 +3,7 @@
  * Copyright (C) 2000 - 2001 
  *   Charles Brain (chbrain@dircon.co.uk)
  *   Ilkka Toivanen (pile@aimo.kareltek.fi)
+ *   Glenn Valenta (glenn@coloradostudios.com)
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -30,9 +31,13 @@
  * Author:
  *   Charles Brain
  *   Ilkka Toivanen
+ *   Glenn Valenta
  * 
  * History:
  *   $Log$
+ *   Revision 1.1.1.1  2001/05/23 20:19:50  pile
+ *   Initial version for sourceforge.net
+ *
  *   Revision 0.2  2001/05/21 13:51:16  pile
  *   Minor fixes in output.
  *
@@ -44,60 +49,50 @@
  *
  */
 
-/* ---------------------------------------------------------------------- */
+#include "main.h"
 
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <linux/soundcard.h>
-#include <math.h>
-#include <stdio.h>
-#include "time.h"
-#include "modem.h"
 
-#define FRAME_SIZE  200
-#define SAMPLE_RATE 8000
+/* Global */
+command_line_options Command_line_options;
 
-/* ---------------------------------------------------------------------- */
-void schedular(int fd, FILE *log_file)
+void schedular(int fd)
 {
   unsigned char sout[FRAME_SIZE*2];
   int readstat;
- 
+
   modem_init();
-  
+
   while(1)
     {
-	if (readstat = read(fd, sout, FRAME_SIZE*2) > 0) 
-	{
-      	  modem((unsigned short*)sout,FRAME_SIZE, log_file);
-	}
-	else {
-	exit (-1);
-	}
+      if (readstat = read(fd, sout, FRAME_SIZE*2) > 0)
+        {
+          modem((unsigned short*)sout,FRAME_SIZE);
+        }
+      else {
+        exit (-1);
+      }
     }
 }
 
-/* ---------------------------------------------------------------------- */
-static const char usage_str[] = "LinuxALE version 0.01c \n"
-"Demodulates MIL-STD 188-141B ALE (Automatic Link Establishment) mode\n"
-"(C) 2000, 2001 Charles Brain, Ilkka Toivanen\n"
-"  -f <filename> : decode from input file 16-bit 8000 Hz wav\n"
-"  -s            : decode from sound card\n"
-"  -l <filename> : write log file\n";
-
-/* ---------------------------------------------------------------------- */
 int main(int argc, char *argv[])
 {
   int i, c, errflg = 0;
   int fd;                        /* file descriptor of input file */
   int arg;
   int sndparam;                  /* parameter to use when initializing 
-				    the sound card */
+              			    the sound card */
   int fmt;
   int sample_rate = SAMPLE_RATE; /* sample rate from audio card */
-  FILE *log_file = NULL;	 /* pointer to log file */
+
+  pthread_t a_thread;          /*  for server */
+
+  Command_line_options.silent=0;     /*  set some defaults */
+  Command_line_options.write_file_fd=NULL;
+  Command_line_options.write_server=0;
+  Command_line_options.port_num=47047;
+  Command_line_options.interface_num=0;
+  Command_line_options.soundcard_fd=0;
+
 
   if (argc < 2) 
     {
@@ -106,7 +101,7 @@ int main(int argc, char *argv[])
     }
 
   /* Read the parameters from the command line */
-  while ((c = getopt(argc, argv, "l:h::f:s::")) != EOF) 
+  while ((c = getopt(argc, argv, "l:h::f:s::g::v::")) != EOF) 
     {
       switch (c)
 	{
@@ -116,8 +111,8 @@ int main(int argc, char *argv[])
 	  break;
         case 'l':
           /* Open log file */
-          log_file = fopen(optarg, "a");
-          if (!log_file) {
+          Command_line_options.write_file_fd = fopen(optarg, "a");
+          if (!Command_line_options.write_file_fd) {
             perror ("open log file");
             exit(10);
           }
@@ -129,13 +124,28 @@ int main(int argc, char *argv[])
 	    exit(10);
 	  }
 	  break;
+	 
+	case 'g': 
+	  /* Enable server */
+	  {
+	    Command_line_options.write_server=1;
+	    pthread_create(&a_thread,NULL,server_init,(void*)NULL);
+	  }
+	  break;
+
+        case 'v': 
+	  /* Disable terminal output (silent to terminal) */
+	  Command_line_options.silent=1;
+	  break;
+
 	case 's':
 	  /* Open and initialize the sound card */
 	  if ((fd = open("/dev/dsp", O_RDONLY)) < 0) {
 	    perror("open");
 	    exit (10);
 	  }
-	  
+
+  
 	  sndparam = AFMT_S16_LE; /* we want 16 bits/sample signed */
 	  /* little endian; works only on little endian systems! */
 	  if (ioctl(fd, SNDCTL_DSP_SETFMT, &sndparam) == -1) {
@@ -192,7 +202,7 @@ int main(int argc, char *argv[])
     exit(2);
   }
 
-  schedular (fd, log_file);
-  
+  schedular (fd);
   return 0;
 }
+

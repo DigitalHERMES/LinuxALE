@@ -358,7 +358,8 @@ void modem(unsigned short *sample, int length, FILE *log_file)
 		  max_magnitude = mag_sum[n];
 		  last_sync_position = n;
 		}
-	    }   
+	    }
+	    last_symbol = symbol_lookup[max_offset];    // HZ added March 8, 2021
 	}
 
 
